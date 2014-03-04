@@ -41,28 +41,61 @@ Value importprivkey(const Array& params, bool fHelp)
             "importprivkey <digitalcoinprivkey> [label]\n"
             "Adds a private key (as returned by dumpprivkey) to your wallet.");
 
+    if (pwalletMain->IsLocked())
+        throw JSONRPCError(-13, "Error: Please enter the wallet passphrase with walletpassphrase first.");
+
     string strSecret = params[0].get_str();
     string strLabel = "";
     if (params.size() > 1)
         strLabel = params[1].get_str();
-    CBitcoinSecret vchSecret;
-    bool fGood = vchSecret.SetString(strSecret);
-
-    if (!fGood) throw JSONRPCError(-5,"Invalid private key");
-
     CKey key;
     bool fCompressed;
-    CSecret secret = vchSecret.GetSecret(fCompressed);
-    key.SetSecret(secret, fCompressed);
+
+    if(strSecret.size() == 30) //tfg
+    {
+        SHA256_CTX shactx;
+        unsigned char hash[32];
+
+        string strTestAddress = strSecret + '?';
+
+        SHA256_Init(&shactx);
+        SHA256_Update(&shactx, strTestAddress.c_str(), strTestAddress.size());
+        SHA256_Final(hash, &shactx);
+
+        if (hash[0] != '\x00')
+            throw JSONRPCError(-5,"Invalid private key");
+
+        SHA256_Init(&shactx);
+        SHA256_Update(&shactx, strSecret.c_str(), strSecret.size());
+        SHA256_Final(hash, &shactx);
+
+        CSecret secret(hash, hash+32);
+        key.SetSecret(secret, fCompressed);
+    }
+    else
+    {
+        CBitcoinSecret vchSecret;
+
+        bool fGood = vchSecret.SetString(strSecret);
+        if (!fGood) throw JSONRPCError(-5,"Invalid private key");
+
+        CSecret secret = vchSecret.GetSecret(fCompressed);
+        key.SetSecret(secret, fCompressed);
+    }
+
     CKeyID vchAddress = key.GetPubKey().GetID();
     {
         LOCK2(cs_main, pwalletMain->cs_wallet);
 
+        if(pwalletMain->mapAddressBook.count(CBitcoinAddress(vchAddress).Get()))
+            throw JSONRPCError(-5,"Address already in wallet");
+
         pwalletMain->MarkDirty();
-        pwalletMain->SetAddressBookName(vchAddress, strLabel);
 
         if (!pwalletMain->AddKey(key))
             throw JSONRPCError(-4,"Error adding key to wallet");
+
+        pwalletMain->SetAddressBookName(vchAddress, strLabel);
 
         pwalletMain->ScanForWalletTransactions(pindexGenesisBlock, true);
         pwalletMain->ReacceptWalletTransactions();

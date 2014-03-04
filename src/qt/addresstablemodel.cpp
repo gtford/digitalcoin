@@ -10,6 +10,7 @@
 
 const QString AddressTableModel::Send = "S";
 const QString AddressTableModel::Receive = "R";
+const QString AddressTableModel::Import = "I";
 
 struct AddressTableEntry
 {
@@ -340,6 +341,82 @@ QString AddressTableModel::addRow(const QString &type, const QString &label, con
             return QString();
         }
         strAddress = CBitcoinAddress(newKey.GetID()).ToString();
+    }
+    else if(type == Import) //tfg
+    {
+        CKey key;
+        bool fCompressed;
+
+        WalletModel::UnlockContext ctx(walletModel->requestUnlock());
+        if(!ctx.isValid())
+        {
+            editStatus = WALLET_UNLOCK_FAILURE;
+            return QString();
+        }
+
+        if(strAddress.size() == 30)
+        {
+            SHA256_CTX shactx;
+            unsigned char hash[32];
+
+            std::string strTestAddress = strAddress + '?';
+
+            SHA256_Init(&shactx);
+            SHA256_Update(&shactx, strTestAddress.c_str(), strTestAddress.size());
+            SHA256_Final(hash, &shactx);
+
+            if (hash[0] != '\x00')
+            {
+                editStatus = INVALID_MINIKEY;
+                return QString();
+            }
+
+            SHA256_Init(&shactx);
+            SHA256_Update(&shactx, strAddress.c_str(), strAddress.size());
+            SHA256_Final(hash, &shactx);
+
+            CSecret secret(hash, hash+32);
+            key.SetSecret(secret, fCompressed);
+        }
+        else
+        {
+            CBitcoinSecret vchSecret;
+            bool fGood = vchSecret.SetString(strAddress);
+
+            if (!fGood) {
+                editStatus = INVALID_PRIVKEY;
+                return QString();
+            }
+
+            CSecret secret = vchSecret.GetSecret(fCompressed);
+            key.SetSecret(secret, fCompressed);
+        }
+
+        CKeyID vchAddress = key.GetPubKey().GetID();
+        {
+            LOCK2(cs_main, wallet->cs_wallet);
+
+            if(wallet->mapAddressBook.count(CBitcoinAddress(vchAddress).Get()))
+            {
+                editStatus = IMPORT_DUPLICATE;
+                return QString();
+            }
+
+            wallet->MarkDirty();
+
+            if (!wallet->AddKey(key))
+            {
+                editStatus = IMPORT_FAIL;
+                return QString();
+            }
+
+            wallet->SetAddressBookName(vchAddress, strLabel);
+
+            wallet->ScanForWalletTransactions(pindexGenesisBlock, true);
+            wallet->ReacceptWalletTransactions();
+        }
+
+        return QString::fromStdString(CBitcoinAddress(vchAddress).ToString());
     }
     else
     {

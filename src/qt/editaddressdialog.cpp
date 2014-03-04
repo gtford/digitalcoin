@@ -11,6 +11,7 @@ EditAddressDialog::EditAddressDialog(Mode mode, QWidget *parent) :
     ui(new Ui::EditAddressDialog), mapper(0), mode(mode), model(0)
 {
     ui->setupUi(this);
+    ui->label_3->setVisible(false);
 
     GUIUtil::setupAddressWidget(ui->addressEdit, this);
 
@@ -29,6 +30,11 @@ EditAddressDialog::EditAddressDialog(Mode mode, QWidget *parent) :
         break;
     case EditSendingAddress:
         setWindowTitle(tr("Edit sending address"));
+        break;
+    case ImportReceivingAddress:
+        setWindowTitle(tr("Import private key"));
+        ui->label_2->setText(tr("Private key"));
+        ui->addressEdit->setMaxLength(52);
         break;
     }
 
@@ -74,6 +80,16 @@ bool EditAddressDialog::saveCurrentRow()
             address = ui->addressEdit->text();
         }
         break;
+    case ImportReceivingAddress:
+        ui->label_3->setText(tr("      Please wait - scanning for transactions matching this address..."));
+        ui->label_3->setVisible(true);
+        ui->buttonBox->setEnabled(false);
+
+        address = model->addRow(
+                AddressTableModel::Import,
+                ui->labelEdit->text(),
+                ui->addressEdit->text());
+        break;
     }
     return !address.isEmpty();
 }
@@ -84,6 +100,8 @@ void EditAddressDialog::accept()
         return;
     if(!saveCurrentRow())
     {
+        ui->label_3->setVisible(false);
+        ui->buttonBox->setEnabled(true);
         switch(model->getEditStatus())
         {
         case AddressTableModel::DUPLICATE_ADDRESS:
@@ -104,6 +122,26 @@ void EditAddressDialog::accept()
         case AddressTableModel::KEY_GENERATION_FAILURE:
             QMessageBox::critical(this, windowTitle(),
                 tr("New key generation failed."),
+                QMessageBox::Ok, QMessageBox::Ok);
+            return;
+        case AddressTableModel::INVALID_PRIVKEY:
+            QMessageBox::warning(this, windowTitle(),
+                tr("The entered key is not a valid digitalcoin private key."),
+                QMessageBox::Ok, QMessageBox::Ok);
+            return;
+        case AddressTableModel::INVALID_MINIKEY:
+            QMessageBox::warning(this, windowTitle(),
+                tr("The entered key is not a valid mini private key."),
+                QMessageBox::Ok, QMessageBox::Ok);
+            return;
+        case AddressTableModel::IMPORT_DUPLICATE:
+            QMessageBox::warning(this, windowTitle(),
+                tr("The entered key is already in the wallet."),
+                QMessageBox::Ok, QMessageBox::Ok);
+            break;
+        case AddressTableModel::IMPORT_FAIL:
+            QMessageBox::critical(this, windowTitle(),
+                tr("Error adding key to wallet."),
                 QMessageBox::Ok, QMessageBox::Ok);
             return;
         case AddressTableModel::OK:

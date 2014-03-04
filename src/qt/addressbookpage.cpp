@@ -31,6 +31,7 @@ AddressBookPage::AddressBookPage(Mode mode, Tabs tab, QWidget *parent) :
     ui->newAddressButton->setIcon(QIcon());
     ui->copyToClipboard->setIcon(QIcon());
     ui->deleteButton->setIcon(QIcon());
+    ui->importAddressButton->setIcon(QIcon());
 #endif
 
 #ifndef USE_QRCODE
@@ -54,10 +55,12 @@ AddressBookPage::AddressBookPage(Mode mode, Tabs tab, QWidget *parent) :
         ui->labelExplanation->setVisible(false);
         ui->deleteButton->setVisible(true);
         ui->signMessage->setVisible(false);
+        ui->importAddressButton->setVisible(false);
         break;
     case ReceivingTab:
         ui->deleteButton->setVisible(false);
         ui->signMessage->setVisible(true);
+        ui->importAddressButton->setVisible(true);
         break;
     }
 
@@ -257,6 +260,8 @@ void AddressBookPage::selectionChanged()
             ui->signMessage->setVisible(false);
             ui->verifyMessage->setEnabled(true);
             ui->verifyMessage->setVisible(true);
+            ui->importAddressButton->setEnabled(false);
+            ui->importAddressButton->setVisible(false);
             break;
         case ReceivingTab:
             // Deleting receiving addresses, however, is not allowed
@@ -267,6 +272,8 @@ void AddressBookPage::selectionChanged()
             ui->signMessage->setVisible(true);
             ui->verifyMessage->setEnabled(false);
             ui->verifyMessage->setVisible(false);
+            ui->importAddressButton->setEnabled(true);
+            ui->importAddressButton->setVisible(true);
             break;
         }
         ui->copyToClipboard->setEnabled(true);
@@ -370,5 +377,19 @@ void AddressBookPage::selectNewAddress(const QModelIndex &parent, int begin, int
         ui->tableView->setFocus();
         ui->tableView->selectRow(idx.row());
         newAddressToSelect.clear();
+    }
+}
+
+void AddressBookPage::on_importAddressButton_clicked()
+{
+    if(!model)
+        return;
+
+    EditAddressDialog dlg(EditAddressDialog::ImportReceivingAddress, this);
+
+    dlg.setModel(model);
+    if(dlg.exec())
+    {
+        newAddressToSelect = dlg.getAddress();
     }
 }
